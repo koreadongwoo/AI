@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AI 뮤직비디오 프롬프트 생성기</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0d12;
+    --panel: #151822;
+    --border: #262b3a;
+    --text: #e8eaf0;
+    --muted: #9aa1b2;
+    --accent: #7c5cff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: "Pretendard", "Segoe UI", system-ui, sans-serif;
+    background: radial-gradient(circle at top, #14162080, var(--bg));
+    color: var(--text);
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+  .wrap { max-width: 880px; margin: 0 auto; }
+  h1 { font-size: 1.6rem; margin-bottom: 4px; }
+  p.sub { color: var(--muted); margin-top: 0; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 24px;
+    margin-bottom: 20px;
+  }
+  label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 6px; }
+  input[type="file"], input[type="text"], textarea {
+    width: 100%;
+    background: #0f1118;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 0.95rem;
+    margin-bottom: 16px;
+  }
+  textarea { min-height: 140px; resize: vertical; font-family: inherit; }
+  button {
+    background: var(--accent);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 20px;
+    font-size: 0.95rem;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .status { color: var(--muted); font-size: 0.85rem; margin-top: 10px; }
+  .card {
+    background: #10121a;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 12px;
+  }
+  .card h3 { margin: 0 0 8px; font-size: 1rem; }
+  pre {
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: #0a0b10;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 0.82rem;
+    color: #cfd3e0;
+  }
+  #results:empty { display: none; }
+  .field { margin-bottom: 10px; }
+  .field .k { color: var(--muted); font-size: 0.78rem; margin-bottom: 2px; }
+  .field .v { font-size: 0.9rem; line-height: 1.5; }
+  .scene-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+  }
+  .scene-header .num { font-weight: 600; }
+  .chip {
+    background: #1d2030;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 0.75rem;
+  }
+  .chip.singing { color: #ffd27c; border-color: #4a3c1f; }
+  .prompt-block { margin-top: 10px; }
+  .prompt-block .row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+  .prompt-block .label { font-size: 0.8rem; color: var(--muted); }
+  .copy-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    border-radius: 6px;
+  }
+  .copy-btn.copied { border-color: var(--accent); color: var(--accent); }
+  .model-tabs { display: flex; gap: 6px; margin-bottom: 6px; }
+  .model-tab {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    border-radius: 6px;
+  }
+  .model-tab.active { color: var(--text); border-color: var(--accent); }
+  .lyric-line { color: #ffd27c; font-style: italic; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>AI 뮤직비디오 프롬프트 생성기</h1>
+    <p class="sub">Suno 노래와 가사를 넣으면 시나리오 · 이미지 프롬프트 · 영상 프롬프트를 순서대로 만들어드려요.</p>
+    <p class="sub" style="font-size:0.8rem;">영상 프롬프트를 KLING/VEO3.1/GROK 웹페이지로 바로 열고 싶으면 터미널에서:
+      <code>python playwright_bridge.py KLING "복사한 프롬프트"</code> (로그인·Generate는 직접)</p>
+
+    <div class="panel">
+      <label for="audio">노래 음원 (mp3/wav)</label>
+      <input type="file" id="audio" accept="audio/mp3,audio/wav,audio/mpeg" />
+
+      <label for="lyrics">가사</label>
+      <textarea id="lyrics" placeholder="가사를 붙여넣으세요"></textarea>
+
+      <label for="mood">분위기 / BPM / 장르 (선택)</label>
+      <input type="text" id="mood" placeholder="예: 잔잔한 발라드, 90 BPM" />
+
+      <button id="generateBtn">뮤직비디오 프롬프트 만들기</button>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div id="results"></div>
+  </div>
+
+<script>
+async function startGeneration() {
+  const audio = document.getElementById("audio").files[0];
+  const lyrics = document.getElementById("lyrics").value.trim();
+  const mood = document.getElementById("mood").value.trim();
+  const statusEl = document.getElementById("status");
+  const btn = document.getElementById("generateBtn");
+
+  if (!audio || !lyrics) {
+    statusEl.textContent = "음원 파일과 가사를 모두 넣어주세요.";
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append("audio", audio);
+  formData.append("lyrics", lyrics);
+  formData.append("mood", mood);
+
+  btn.disabled = true;
+  statusEl.textContent = "생성 중이에요...";
+
+  try {
+    const res = await fetch("/generate", { method: "POST", body: formData });
+    const data = await res.json();
+    renderResults(data);
+    statusEl.textContent = "완료됐어요.";
+  } catch (err) {
+    statusEl.textContent = "오류가 발생했어요: " + err;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+function copyText(text, btn) {
+  navigator.clipboard.writeText(text).then(() => {
+    const original = btn.textContent;
+    btn.textContent = "복사됨";
+    btn.classList.add("copied");
+    setTimeout(() => {
+      btn.textContent = original;
+      btn.classList.remove("copied");
+    }, 1500);
+  });
+}
+
+function renderStorylineCard(storyline) {
+  const card = document.createElement("div");
+  card.className = "card";
+  const fields = [
+    ["컨셉", storyline.concept],
+    ["테마", storyline.theme],
+    ["비주얼 스타일", storyline.visual_style],
+    ["전개(narrative arc)", storyline.narrative_arc],
+    ["스토리라인", storyline.storyline],
+  ];
+  card.innerHTML = `<h3>1. 스토리라인</h3>` + fields.map(([k, v]) => `
+    <div class="field">
+      <div class="k">${escapeHtml(k)}</div>
+      <div class="v">${escapeHtml(v)}</div>
+    </div>
+  `).join("");
+  return card;
+}
+
+function renderSceneCard(scene, index) {
+  const card = document.createElement("div");
+  card.className = "card";
+
+  const singingChip = scene.has_singing
+    ? `<span class="chip singing">🎤 노래 부르는 씬</span>`
+    : "";
+  const lyricLine = scene.has_singing && scene.singing_lyrics
+    ? `<div class="field"><div class="k">가사</div><div class="v lyric-line">"${escapeHtml(scene.singing_lyrics)}"</div></div>`
+    : "";
+
+  const models = Object.keys(scene.video_prompts || {});
+  const modelTabsHtml = models.map((m, i) =>
+    `<button type="button" class="model-tab${i === 0 ? " active" : ""}" data-scene="${index}" data-model="${escapeHtml(m)}">${escapeHtml(m)}</button>`
+  ).join("");
+
+  card.innerHTML = `
+    <div class="scene-header">
+      <span class="num">Scene ${scene.scene_number}</span>
+      <span class="chip">${escapeHtml(scene.lyric_segment || "")}</span>
+      <span class="chip">${escapeHtml(scene.shot_type || "")}</span>
+      <span class="chip">${escapeHtml(scene.mood || "")}</span>
+      ${singingChip}
+    </div>
+    <div class="field"><div class="k">장소 / 상황</div><div class="v">${escapeHtml(scene.setting)} — ${escapeHtml(scene.action)}</div></div>
+    ${lyricLine}
+
+    <div class="prompt-block">
+      <div class="row">
+        <span class="label">Image Prompt (GPT이미지2 / 나노바나나2)</span>
+        <button type="button" class="copy-btn" data-copy-target="image-${index}">복사</button>
+      </div>
+      <pre id="image-${index}">${escapeHtml(scene.image_prompt)}</pre>
+    </div>
+
+    <div class="prompt-block">
+      <div class="row">
+        <span class="label">Video Prompt</span>
+        <button type="button" class="copy-btn" data-copy-target="video-${index}">복사</button>
+      </div>
+      <div class="model-tabs">${modelTabsHtml}</div>
+      <pre id="video-${index}">${escapeHtml(scene.video_prompts[models[0]])}</pre>
+    </div>
+  `;
+
+  models.forEach((m) => {
+    const tabs = card.querySelectorAll(`.model-tab[data-scene="${index}"]`);
+    tabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        tabs.forEach((t) => t.classList.remove("active"));
+        tab.classList.add("active");
+        card.querySelector(`#video-${index}`).textContent = scene.video_prompts[tab.dataset.model];
+      });
+    });
+  });
+
+  card.querySelectorAll(".copy-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const target = card.querySelector(`#${btn.dataset.copyTarget}`);
+      copyText(target.textContent, btn);
+    });
+  });
+
+  return card;
+}
+
+function renderResults(data) {
+  const results = document.getElementById("results");
+  results.innerHTML = "";
+
+  if (data.storyline) {
+    results.appendChild(renderStorylineCard(data.storyline));
+  }
+
+  if (data.scenes && data.scenes.length) {
+    const heading = document.createElement("h3");
+    heading.textContent = "2. 씬별 이미지 · 영상 프롬프트";
+    heading.style.marginTop = "24px";
+    results.appendChild(heading);
+
+    data.scenes.forEach((scene, i) => {
+      results.appendChild(renderSceneCard(scene, i));
+    });
+  }
+}
+
+document.getElementById("generateBtn").addEventListener("click", startGeneration);
+</script>
+</body>
+</html>
